@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.cyanogenmod.settings.device;
+package com.lineageos.settings.device;
 
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
@@ -41,7 +41,7 @@ import android.view.KeyEvent;
 
 import java.io.File;
 
-import com.cyanogenmod.settings.device.utils.FileUtils;
+import com.lineageos.settings.device.utils.FileUtils;
 
 public class Startup extends BroadcastReceiver {
     @Override
