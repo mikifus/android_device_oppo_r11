@@ -71,8 +71,11 @@ PRODUCT_PROPERTY_OVERRIDES += \
 TARGET_SCREEN_HEIGHT := 1920
 TARGET_SCREEN_WIDTH := 1080
 
+PRODUCT_PROPERTY_OVERRIDES += \
+ro.sys.sdcardfs=true
+
 # Haters gonna hate..
-PRODUCT_CHARACTERISTICS := default
+PRODUCT_CHARACTERISTICS := nosdcard
 
 # Alipay & WeChat fingerprint payment
 PRODUCT_PACKAGES += \
@@ -147,7 +150,8 @@ PRODUCT_COPY_FILES += \
 
 # Camera
 PRODUCT_PACKAGES += \
-    Snap
+    Snap \
+    Camera2
 
 # Connectivity Engine support (CNE)
 PRODUCT_PACKAGES += \
