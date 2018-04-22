@@ -191,6 +191,9 @@ ifeq ($(HOST_OS),linux)
   endif
 endif
 
+# Extended Filesystem Support
+TARGET_EXFAT_DRIVER := sdfat
+
 # GPS
 TARGET_NO_RPC := true
 USE_DEVICE_SPECIFIC_GPS := true
