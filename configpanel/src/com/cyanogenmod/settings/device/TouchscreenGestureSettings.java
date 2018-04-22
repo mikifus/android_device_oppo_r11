@@ -1,4 +1,4 @@
-package com.cyanogenmod.settings.device;
+package com.lineageos.settings.device;
 
 
 import android.os.Bundle;
@@ -11,8 +11,8 @@ import android.provider.Settings.System;
 import android.view.MenuItem;
 
 import android.provider.Settings;
-import com.cyanogenmod.settings.device.utils.FileUtils;
-import cyanogenmod.providers.CMSettings;
+import com.lineageos.settings.device.utils.FileUtils;
+import lineageos.providers.CMSettings;
 
 public class TouchscreenGestureSettings extends PreferenceActivity {
     private static final String KEY_HAPTIC_FEEDBACK = "touchscreen_gesture_haptic_feedback";

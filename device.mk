@@ -335,12 +335,12 @@ PRODUCT_COPY_FILES += \
 # Keyhandler
 PRODUCT_PACKAGES += \
     ConfigPanel \
-    com.cyanogenmod.keyhandler
+    com.lineageos.keyhandler
 
-PRODUCT_SYSTEM_SERVER_JARS += com.cyanogenmod.keyhandler
+PRODUCT_SYSTEM_SERVER_JARS += com.lineageos.keyhandler
 
 # never dexopt the keyhandler
-$(call add-product-dex-preopt-module-config,com.cyanogenmod.keyhandler,disable)
+$(call add-product-dex-preopt-module-config,com.lineageos.keyhandler,disable)
 
 # call dalvik heap config
 $(call inherit-product-if-exists, frameworks/native/build/phone-xxhdpi-3072-dalvik-heap.mk)
