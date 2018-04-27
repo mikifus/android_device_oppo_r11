@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.lineageos.settings.doze;
+package com.cyanogenmod.settings.doze;
 
 import android.content.Context;
 import android.hardware.Sensor;

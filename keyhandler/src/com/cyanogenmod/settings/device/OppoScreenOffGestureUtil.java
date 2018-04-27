@@ -1,4 +1,4 @@
-package com.lineageos.settings.device;
+package com.cyanogenmod.settings.device;
 
 import android.content.Context;
 import android.graphics.Point;
