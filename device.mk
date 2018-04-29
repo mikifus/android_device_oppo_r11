@@ -24,7 +24,9 @@
 $(call inherit-product-if-exists, vendor/oppo/r11/r11-vendor.mk)
 
 # Overlays
-DEVICE_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay
+DEVICE_PACKAGE_OVERLAYS += \
+    $(LOCAL_PATH)/overlay \
+    $(LOCAL_PATH)/overlay-lineage
 
 # Permissions
 PRODUCT_COPY_FILES += \
@@ -78,13 +80,13 @@ ro.sys.sdcardfs=true
 PRODUCT_CHARACTERISTICS := nosdcard
 
 # Alipay & WeChat fingerprint payment
-PRODUCT_PACKAGES += \
-    ifaamanager \
-    soter
+#PRODUCT_PACKAGES += \
+#    ifaamanager \
+#    soter
 
-PRODUCT_BOOT_JARS += \
-    ifaamanager \
-    soter
+#PRODUCT_BOOT_JARS += \
+#    ifaamanager \
+#    soter
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/ifaamanager/etc/org.ifaa.android.manager.permissions.xml:system/etc/permissions/org.ifaa.android.manager.permissions.xml
@@ -103,24 +105,11 @@ PRODUCT_PACKAGES += \
     libvolumelistener \
     tinymix
 
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/audio/aanc_tuning_mixer.txt:system/etc/aanc_tuning_mixer.txt \
-    $(LOCAL_PATH)/audio/aanc_tuning_mixer_tavil.txt:system/etc/aanc_tuning_mixer_tavil.txt\
-    $(LOCAL_PATH)/audio/audio_effects.conf:system/vendor/etc/audio_effects.conf \
-    $(LOCAL_PATH)/audio/audio_output_policy.conf:system/vendor/etc/audio_output_policy.conf \
-    $(LOCAL_PATH)/audio/audio_platform_info.xml:system/etc/audio_platform_info.xml \
-    $(LOCAL_PATH)/audio/audio_platform_info_extcodec.xml:system/etc/audio_platform_info_extcodec.xml \
-    $(LOCAL_PATH)/audio/audio_policy_configuration.xml:system/etc/audio_policy_configuration.xml \
-    $(LOCAL_PATH)/audio/audio_policy.conf:system/etc/audio_policy.conf \
-    $(LOCAL_PATH)/audio/listen_platform_info.xml:system/etc/listen_platform_info.xml \
-    $(LOCAL_PATH)/audio/mixer_paths_16051.xml:system/etc/mixer_paths_16051.xml \
-    $(LOCAL_PATH)/audio/mixer_paths_16103.xml:system/etc/mixer_paths_16103.xml \
-    $(LOCAL_PATH)/audio/mixer_paths_16118.xml:system/etc/mixer_paths_16118.xml \
-    $(LOCAL_PATH)/audio/sound_trigger_mixer_paths_wcd9330.xml:system/etc/sound_trigger_mixer_paths_wcd9330.xml \
-    $(LOCAL_PATH)/audio/sound_trigger_mixer_paths_wcd9335.xml:system/etc/sound_trigger_mixer_paths_wcd9335.xml \
-    $(LOCAL_PATH)/audio/sound_trigger_mixer_paths_wcd9340.xml:system/etc/sound_trigger_mixer_paths_wcd9340.xml \
-    $(LOCAL_PATH)/audio/sound_trigger_mixer_paths.xml:system/etc/sound_trigger_mixer_paths.xml \
-    $(LOCAL_PATH)/audio/sound_trigger_platform_info.xml:system/etc/sound_trigger_platform_info.xml
+PRODUCT_PACKAGES += \
+    android.hardware.audio@2.0-service \
+    android.hardware.audio@2.0-impl \
+    android.hardware.audio.effect@2.0-impl \
+    android.hardware.soundtrigger@2.0-impl
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/audio/16051/default_volume_tables.xml:system/etc/audio/16051/default_volume_tables.xml \
@@ -148,10 +137,25 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     external/ant-wireless/antradio-library/com.dsi.ant.antradio_library.xml:system/etc/permissions/com.dsi.ant.antradio_library.xml
 
+# Bluetooth
+PRODUCT_PACKAGES += \
+    android.hardware.bluetooth@1.0-impl \
+    android.hardware.bluetooth@1.0-service \
+    libbt-vendor \
+    libbthost_if
+
 # Camera
 PRODUCT_PACKAGES += \
     Snap \
-    Camera2
+    Camera2 \
+    camera.device@1.0-impl \
+    camera.device@3.2-impl \
+    android.hardware.camera.provider@2.4-impl \
+    android.hardware.camera.provider@2.4-service
+
+# Configstore
+PRODUCT_PACKAGES += \
+    android.hardware.configstore@1.0-service
 
 # Connectivity Engine support (CNE)
 PRODUCT_PACKAGES += \
@@ -165,8 +169,19 @@ PRODUCT_PACKAGES += \
     gralloc.sdm660 \
     hwcomposer.sdm660 \
     memtrack.sdm660 \
+    libdisplayconfig \
+    libhwc2on1adapter \
     liboverlay \
-    libtinyxml
+    libqdMetaData \
+    libqdMetaData.system \
+    libtinyxml \
+    android.hardware.graphics.allocator@2.0-impl \
+    android.hardware.graphics.allocator@2.0-service \
+    android.hardware.graphics.mapper@2.0-impl \
+    android.hardware.graphics.composer@2.1-impl \
+    android.hardware.graphics.composer@2.1-service \
+    android.hardware.memtrack@1.0-impl \
+    android.hardware.memtrack@1.0-service
 
 # Display calibration
 PRODUCT_PACKAGES += \
@@ -183,27 +198,46 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     OppoDoze
 
+#DRM
+PRODUCT_PACKAGES += \
+    android.hardware.drm@1.0-impl \
+    android.hardware.drm@1.0-service \
+    android.hardware.drm@1.0-service.widevine
+
 # Fingerprint
 PRODUCT_PACKAGES += \
-    fingerprintd \
-    gatekeeperd
+    android.hardware.biometrics.fingerprint@2.1-service
 
-# For android_filesystem_config.h
+# Gatekeeper
 PRODUCT_PACKAGES += \
-    fs_config_files
+    android.hardware.gatekeeper@1.0-impl \
+    android.hardware.gatekeeper@1.0-service
 
 # GPS
 PRODUCT_PACKAGES += \
-    gps.sdm660 \
-    gps.conf \
+    libcurl \
+    libgnss \
     libgnsspps \
-    libvehiclenetwork-native
+    android.hardware.gnss@1.0-impl-qti \
+    android.hardware.gnss@1.0-service-qti
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/gps/etc/flp.conf:system/vendor/etc/flp.conf \
     $(LOCAL_PATH)/gps/etc/izat.conf:system/vendor/etc/izat.conf \
     $(LOCAL_PATH)/gps/etc/sap.conf:system/vendor/etc/sap.conf \
     $(LOCAL_PATH)/gps/etc/xtwifi.conf:system/vendor/etc/xtwifi.conf
+
+# Healthd
+PRODUCT_PACKAGES += \
+    android.hardware.health@1.0-impl \
+    android.hardware.health@1.0-convert \
+    android.hardware.health@1.0-service
+
+# HIDL
+PRODUCT_PACKAGES += \
+    android.hidl.base@1.0 \
+    android.hidl.manager@1.0 \
+    android.hidl.manager@1.0-java
 
 # IPv6
 PRODUCT_PACKAGES += \
@@ -224,9 +258,16 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/keylayout/uinput-fpc.kl:system/usr/keylayout/uinput-fpc.kl \
     $(LOCAL_PATH)/keylayout/gpio-keys.kl:system/usr/keylayout/gpio-keys.kl
 
+# Keymaster
+PRODUCT_PACKAGES += \
+    android.hardware.keymaster@3.0-impl \
+    android.hardware.keymaster@3.0-service
+
 # Lights
 PRODUCT_PACKAGES += \
-    lights.sdm660
+    lights.sdm660 \
+    android.hardware.light@2.0-impl \
+    android.hardware.light@2.0-service
 
 # LiveDisplay native
 PRODUCT_PACKAGES += \
@@ -243,10 +284,26 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml:system/etc/media_codecs_google_telephony.xml \
     frameworks/av/media/libstagefright/data/media_codecs_google_video.xml:system/etc/media_codecs_google_video.xml
 
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/seccomp/mediacodec-seccomp.policy:$system/etc/seccomp_policy/mediacodec.policy \
+    $(LOCAL_PATH)/seccomp/mediaextractor-seccomp.policy:$system/etc/seccomp_policy/mediaextractor.policy
+
+# Media Extensions
+PRODUCT_PACKAGES += \
+    libmediametrics \
+    mediametrics
+
+# Net
+PRODUCT_PACKAGES += \
+    android.system.net.netd@1.0 \
+    libandroid_net \
+    netutils-wrapper-1.0
+
 # OMX
 PRODUCT_PACKAGES += \
     libc2dcolorconvert \
     libextmedia_jni \
+    libhypv_intercept \
     libOmxAacEnc \
     libOmxAmrEnc \
     libOmxCore \
@@ -258,7 +315,8 @@ PRODUCT_PACKAGES += \
 
 # Power
 PRODUCT_PACKAGES += \
-    power.sdm660
+    power.sdm660 \
+    android.hardware.power@1.1-service-qti
 
 # QMI
 PRODUCT_PACKAGES += \
@@ -295,28 +353,78 @@ PRODUCT_PACKAGES += \
     init.qcom.uicc.sh \
     init.qcom.wifi.sh
 
+# RCS
+PRODUCT_PACKAGES += \
+    rcs_service_aidl \
+    rcs_service_aidl.xml \
+    rcs_service_api \
+    rcs_service_api.xml
+
+# RenderScript HAL
+PRODUCT_PACKAGES += \
+    android.hardware.renderscript@1.0-impl
+
 # RIL
 PRODUCT_PACKAGES += \
+	android.hardware.broadcastradio@1.0-impl \
     librmnetctl \
     libxml2 \
     libprotobuf-cpp-full
 
 # Sensors
 PRODUCT_PACKAGES += \
-    sensors.sdm660
+    android.hardware.sensors@1.0-impl \
+    android.hardware.sensors@1.0-service
 
-# Wifi
+# Telephony
 PRODUCT_PACKAGES += \
+    ims-ext-common \
+    telephony-ext
+
+PRODUCT_BOOT_JARS += \
+    telephony-ext
+
+# TextClassifier smart selection model files
+PRODUCT_PACKAGES += \
+    textclassifier.smartselection.bundle1
+
+# Thermal
+PRODUCT_PACKAGES += \
+    android.hardware.thermal@1.0-impl \
+    android.hardware.thermal@1.0-service
+
+# USB
+PRODUCT_PACKAGES += \
+    android.hardware.usb@1.0-service
+
+# Vibrator
+PRODUCT_PACKAGES += \
+    android.hardware.vibrator@1.0-impl \
+    android.hardware.vibrator@1.0-service
+
+# VNDK-SP:
+PRODUCT_PACKAGES += \
+    vndk-sp
+
+# VR
+PRODUCT_PACKAGES += \
+    android.hardware.vr@1.0-impl \
+    android.hardware.vr@1.0-service
+
+ # Wifi
+ PRODUCT_PACKAGES += \
     ipacm \
-    ipacm-diag \
     IPACM_cfg.xml \
     libqsap_sdk \
     libQWiFiSoftApCfg \
     libwpa_client \
     hostapd \
-    dhcpcd.conf \
+    hostapd_cli \
+    libwifi-hal-qcom \
+    wificond \
     wpa_supplicant \
-    wpa_supplicant.conf
+    wpa_supplicant.conf \
+    android.hardware.wifi@1.0-service
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/wifi/hostapd.accept:system/etc/hostapd/hostapd.accept \
@@ -328,19 +436,11 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/wifi/WCNSS_qcom_cfg.ini:system/etc/wifi/WCNSS_qcom_cfg.ini \
     $(LOCAL_PATH)/wifi/WCNSS_qcom_cfg_cmcc.ini:system/etc/wifi/WCNSS_qcom_cfg_cmcc.ini \
-    $(LOCAL_PATH)/wifi/WCNSS_qcom_cfg_version:system/etc/wifi/WCNSS_qcom_cfg_version \
-    $(LOCAL_PATH)/wifi/wpa_supplicant_SG_SINGTEL.conf:system/etc/wifi/wpa_supplicant_SG_SINGTEL.conf \
     $(LOCAL_PATH)/wifi/fstman.ini:system/etc/wifi/fstman.ini
 
 # Keyhandler
 PRODUCT_PACKAGES += \
-    ConfigPanel \
-    com.lineageos.keyhandler
-
-PRODUCT_SYSTEM_SERVER_JARS += com.lineageos.keyhandler
-
-# never dexopt the keyhandler
-$(call add-product-dex-preopt-module-config,com.lineageos.keyhandler,disable)
+    ConfigPanel
 
 # call dalvik heap config
 $(call inherit-product-if-exists, frameworks/native/build/phone-xxhdpi-3072-dalvik-heap.mk)

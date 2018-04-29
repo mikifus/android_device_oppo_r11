@@ -41,7 +41,7 @@ $(shell mkdir -p $(TARGET_OUT_ETC)/firmware/wlan/qca_cld; \
 	ln -sf /persist/wlan_mac.bin \
 	    $(TARGET_OUT_ETC)/firmware/wlan/qca_cld/wlan_mac.bin; \
 	ln -sf /persist/WCNSS_qcom_cfg.ini \
-	    $(TARGET_OUT_ETC)/firmware/wlan/qca_cld/WCNSS_qcom_cfg.ini)
+        $(TARGET_OUT_ETC)/firmware/wlan/qca_cld/WCNSS_qcom_cfg.ini)
 
 $(shell mkdir -p $(TARGET_OUT)/lib/modules; \
     ln -sf /system/lib/modules/qca_cld3/qca_cld3_wlan.ko \
