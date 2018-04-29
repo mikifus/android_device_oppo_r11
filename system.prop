@@ -207,7 +207,7 @@ ro.qti.sdk.sensors.gestures=false
 
 #ifdef VENDOR_EDIT
 #HongBo@Camera OPPO 2017/02/21  Expose aux camera for below packages
-camera.aux.packagelist=org.codeaurora.snapcam,com.oppo.camera,org.lineageos.snap
+camera.aux.packagelist=org.codeaurora.snapcam,com.oppo.camera,org.cyanogenmod.snap
 #else
 #Expose aux camera for below packages
 #camera.aux.packagelist=org.codeaurora.snapcam

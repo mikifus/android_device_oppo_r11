@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.lineageos.settings.doze;
+package com.cyanogenmod.settings.doze;
 
 import android.os.Bundle;
 import android.view.MenuItem;
