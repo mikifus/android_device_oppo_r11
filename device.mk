@@ -169,19 +169,21 @@ PRODUCT_PACKAGES += \
     gralloc.sdm660 \
     hwcomposer.sdm660 \
     memtrack.sdm660 \
-    libdisplayconfig \
-    libhwc2on1adapter \
-    liboverlay \
-    libqdMetaData \
-    libqdMetaData.system \
-    libtinyxml \
     android.hardware.graphics.allocator@2.0-impl \
     android.hardware.graphics.allocator@2.0-service \
-    android.hardware.graphics.mapper@2.0-impl \
     android.hardware.graphics.composer@2.1-impl \
     android.hardware.graphics.composer@2.1-service \
+    android.hardware.graphics.mapper@2.0-impl \
+    android.hardware.configstore@1.0-service \
     android.hardware.memtrack@1.0-impl \
-    android.hardware.memtrack@1.0-service
+    android.hardware.memtrack@1.0-service \
+    libdisplayconfig \
+    libhwc2on1adapter \
+    libgenlock \
+    liboverlay \
+    libtinyxml \
+    libqdMetaData \
+    libqdMetaData.system
 
 # Display calibration
 PRODUCT_PACKAGES += \

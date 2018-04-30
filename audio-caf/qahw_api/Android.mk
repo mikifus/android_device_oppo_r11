@@ -8,7 +8,6 @@ libqahw-inc := $(LOCAL_PATH)/inc
 
 LOCAL_MODULE := libqahw
 LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_OWNER := qti
 LOCAL_C_INCLUDES   := $(libqahw-inc)
 
 LOCAL_SRC_FILES := \
@@ -40,5 +39,5 @@ LOCAL_PRELINK_MODULE    := false
 include $(BUILD_SHARED_LIBRARY)
 
 #test app compilation
-include $(LOCAL_PATH)/test/Android.mk
+#include $(LOCAL_PATH)/test/Android.mk
 endif

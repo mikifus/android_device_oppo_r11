@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
+* Copyright (c) 2014 - 2018, The Linux Foundation. All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -88,7 +88,7 @@ void HWCDisplayPrimary::Destroy(HWCDisplay *hwc_display) {
 HWCDisplayPrimary::HWCDisplayPrimary(CoreInterface *core_intf, BufferAllocator *buffer_allocator,
                                      HWCCallbacks *callbacks, qService::QService *qservice)
     : HWCDisplay(core_intf, callbacks, kPrimary, HWC_DISPLAY_PRIMARY, true, qservice,
-                 DISPLAY_CLASS_PRIMARY),
+                 DISPLAY_CLASS_PRIMARY, buffer_allocator),
       buffer_allocator_(buffer_allocator),
       cpu_hint_(NULL) {
 }
@@ -112,8 +112,11 @@ int HWCDisplayPrimary::Init() {
     return status;
   }
   color_mode_ = new HWCColorMode(display_intf_);
+  color_mode_->Init();
+  HWCDebugHandler::Get()->GetProperty("vendor.display.enable_default_color_mode",
+                                      &default_mode_status_);
 
-  return INT(color_mode_->Init());
+  return status;
 }
 
 void HWCDisplayPrimary::ProcessBootAnimCompleted() {
@@ -150,8 +153,10 @@ void HWCDisplayPrimary::ProcessBootAnimCompleted() {
     boot_animation_completed_ = true;
     // Applying default mode after bootanimation is finished And
     // If Data is Encrypted, it is ready for access.
-    if (display_intf_)
+    if (display_intf_) {
       display_intf_->ApplyDefaultDisplayMode();
+      RestoreColorTransform();
+    }
   }
 }
 
@@ -159,18 +164,24 @@ HWC2::Error HWCDisplayPrimary::Validate(uint32_t *out_num_types, uint32_t *out_n
   auto status = HWC2::Error::None;
   DisplayError error = kErrorNone;
 
+  if (default_mode_status_ && !boot_animation_completed_) {
+    ProcessBootAnimCompleted();
+  }
+
   if (display_paused_) {
     MarkLayersForGPUBypass();
     return status;
   }
+
+
+  // Fill in the remaining blanks in the layers and add them to the SDM layerstack
+  BuildLayerStack();
 
   if (color_tranform_failed_) {
     // Must fall back to client composition
     MarkLayersForClientComposition();
   }
 
-  // Fill in the remaining blanks in the layers and add them to the SDM layerstack
-  BuildLayerStack();
   // Checks and replaces layer stack for solid fill
   SolidFillPrepare();
 
@@ -183,8 +194,11 @@ HWC2::Error HWCDisplayPrimary::Validate(uint32_t *out_num_types, uint32_t *out_n
     layer_stack_.flags.post_processed_output = post_processed_output_;
   }
 
-  bool one_updating_layer = SingleLayerUpdating();
-  ToggleCPUHint(one_updating_layer);
+  uint32_t num_updating_layers = GetUpdatingLayersCount();
+  bool one_updating_layer = (num_updating_layers == 1);
+  if (num_updating_layers != 0) {
+    ToggleCPUHint(one_updating_layer);
+  }
 
   uint32_t refresh_rate = GetOptimalRefreshRate(one_updating_layer);
   if (current_refresh_rate_ != refresh_rate) {
@@ -201,7 +215,10 @@ HWC2::Error HWCDisplayPrimary::Validate(uint32_t *out_num_types, uint32_t *out_n
   }
 
   if (layer_set_.empty()) {
-    flush_ = true;
+    // Avoid flush for Command mode panel.
+    DisplayConfigFixedInfo display_config;
+    display_intf_->GetConfig(&display_config);
+    flush_ = !display_config.is_cmdmode;
     return status;
   }
 
@@ -251,6 +268,19 @@ HWC2::Error HWCDisplayPrimary::SetColorMode(android_color_mode_t mode) {
   }
 
   callbacks_->Refresh(HWC_DISPLAY_PRIMARY);
+  validated_.reset();
+
+  return status;
+}
+
+HWC2::Error HWCDisplayPrimary::RestoreColorTransform() {
+  auto status = color_mode_->RestoreColorTransform();
+  if (status != HWC2::Error::None) {
+    DLOGE("failed to RestoreColorTransform");
+    return status;
+  }
+
+  callbacks_->Refresh(HWC_DISPLAY_PRIMARY);
 
   return status;
 }
@@ -262,7 +292,7 @@ HWC2::Error HWCDisplayPrimary::SetColorTransform(const float *matrix,
   }
 
   auto status = color_mode_->SetColorTransform(matrix, hint);
-  if (status != HWC2::Error::None) {
+  if ((hint != HAL_COLOR_TRANSFORM_IDENTITY) && (status != HWC2::Error::None)) {
     DLOGE("failed for hint = %d", hint);
     color_tranform_failed_ = true;
     return status;
@@ -270,6 +300,7 @@ HWC2::Error HWCDisplayPrimary::SetColorTransform(const float *matrix,
 
   callbacks_->Refresh(HWC_DISPLAY_PRIMARY);
   color_tranform_failed_ = false;
+  validated_.reset();
 
   return status;
 }
@@ -311,6 +342,7 @@ int HWCDisplayPrimary::Perform(uint32_t operation, ...) {
       return -EINVAL;
   }
   va_end(args);
+  validated_.reset();
 
   return 0;
 }
@@ -358,9 +390,12 @@ void HWCDisplayPrimary::SetSecureDisplay(bool secure_display_active) {
     DLOGI("SecureDisplay state changed from %d to %d Needs Flush!!", secure_display_active_,
           secure_display_active);
     secure_display_active_ = secure_display_active;
-    skip_prepare_ = true;
+
+    // Avoid flush for Command mode panel.
+    DisplayConfigFixedInfo display_config;
+    display_intf_->GetConfig(&display_config);
+    skip_prepare_ = !display_config.is_cmdmode;
   }
-  return;
 }
 
 void HWCDisplayPrimary::ForceRefreshRate(uint32_t refresh_rate) {
@@ -400,6 +435,7 @@ DisplayError HWCDisplayPrimary::Refresh() {
 
 void HWCDisplayPrimary::SetIdleTimeoutMs(uint32_t timeout_ms) {
   display_intf_->SetIdleTimeoutMs(timeout_ms);
+  validated_.reset();
 }
 
 static void SetLayerBuffer(const BufferInfo &output_buffer_info, LayerBuffer *output_buffer) {
@@ -499,6 +535,7 @@ void HWCDisplayPrimary::SetFrameDumpConfig(uint32_t count, uint32_t bit_mask_lay
   output_buffer_base_ = buffer;
   post_processed_output_ = true;
   DisablePartialUpdateOneFrame();
+  validated_.reset();
 }
 
 int HWCDisplayPrimary::FrameCaptureAsync(const BufferInfo &output_buffer_info,
@@ -517,12 +554,12 @@ int HWCDisplayPrimary::FrameCaptureAsync(const BufferInfo &output_buffer_info,
   GetPanelResolution(&panel_width, &panel_height);
   GetFrameBufferResolution(&fb_width, &fb_height);
 
-  if (post_processed_output && (output_buffer_info_.buffer_config.width < panel_width ||
-                                output_buffer_info_.buffer_config.height < panel_height)) {
+  if (post_processed_output && (output_buffer_info.buffer_config.width < panel_width ||
+                                output_buffer_info.buffer_config.height < panel_height)) {
     DLOGE("Buffer dimensions should not be less than panel resolution");
     return -1;
-  } else if (!post_processed_output && (output_buffer_info_.buffer_config.width < fb_width ||
-                                        output_buffer_info_.buffer_config.height < fb_height)) {
+  } else if (!post_processed_output && (output_buffer_info.buffer_config.width < fb_width ||
+                                        output_buffer_info.buffer_config.height < fb_height)) {
     DLOGE("Buffer dimensions should not be less than FB resolution");
     return -1;
   }
@@ -543,6 +580,7 @@ DisplayError HWCDisplayPrimary::SetDetailEnhancerConfig
 
   if (display_intf_) {
     error = display_intf_->SetDetailEnhancerData(de_data);
+    validated_.reset();
   }
   return error;
 }
@@ -552,6 +590,7 @@ DisplayError HWCDisplayPrimary::ControlPartialUpdate(bool enable, uint32_t *pend
 
   if (display_intf_) {
     error = display_intf_->ControlPartialUpdate(enable, pending);
+    validated_.reset();
   }
 
   return error;
@@ -562,6 +601,7 @@ DisplayError HWCDisplayPrimary::DisablePartialUpdateOneFrame() {
 
   if (display_intf_) {
     error = display_intf_->DisablePartialUpdateOneFrame();
+    validated_.reset();
   }
 
   return error;
@@ -569,7 +609,9 @@ DisplayError HWCDisplayPrimary::DisablePartialUpdateOneFrame() {
 
 
 DisplayError HWCDisplayPrimary::SetMixerResolution(uint32_t width, uint32_t height) {
-  return display_intf_->SetMixerResolution(width, height);
+  DisplayError error = display_intf_->SetMixerResolution(width, height);
+  validated_.reset();
+  return error;
 }
 
 DisplayError HWCDisplayPrimary::GetMixerResolution(uint32_t *width, uint32_t *height) {

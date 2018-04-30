@@ -115,6 +115,10 @@ DisplayError HWDevice::Deinit() {
     device_fd_ = -1;
   }
 
+  if (stored_retire_fence >= 0) {
+    Sys::close_(stored_retire_fence);
+    stored_retire_fence = -1;
+  }
   return kErrorNone;
 }
 
@@ -242,6 +246,23 @@ DisplayError HWDevice::Validate(HWLayers *hw_layers) {
         mdp_layer.pipe_ndx = pipe_info->pipe_id;
         mdp_layer.horz_deci = pipe_info->horizontal_decimation;
         mdp_layer.vert_deci = pipe_info->vertical_decimation;
+#ifdef MDP_COMMIT_RECT_NUM
+        mdp_layer.rect_num = pipe_info->rect;
+#endif
+
+#ifdef DISPLAY_SHIFT_HORIZONTAL
+        if (device_type_ == kDevicePrimary) {
+          pipe_info->dst_roi.left += DISPLAY_SHIFT_HORIZONTAL;
+          pipe_info->dst_roi.right += DISPLAY_SHIFT_HORIZONTAL;
+        }
+#endif
+
+#ifdef DISPLAY_SHIFT_VERTICAL
+        if (device_type_ == kDevicePrimary) {
+          pipe_info->dst_roi.top += DISPLAY_SHIFT_VERTICAL;
+          pipe_info->dst_roi.bottom += DISPLAY_SHIFT_VERTICAL;
+        }
+#endif
 
         SetRect(pipe_info->src_roi, &mdp_layer.src_rect);
         SetRect(pipe_info->dst_roi, &mdp_layer.dst_rect);
@@ -350,6 +371,9 @@ DisplayError HWDevice::Validate(HWLayers *hw_layers) {
   mdp_commit.dest_scaler_cnt = UINT32(hw_layer_info.dest_scale_info_map.size());
 
   mdp_commit.flags |= MDP_VALIDATE_LAYER;
+#ifdef MDP_COMMIT_RECT_NUM
+  mdp_commit.flags |= MDP_COMMIT_RECT_NUM;
+#endif
   if (Sys::ioctl_(device_fd_, INT(MSMFB_ATOMIC_COMMIT), &mdp_disp_commit_) < 0) {
     if (errno == ESHUTDOWN) {
       DLOGI_IF(kTagDriverConfig, "Driver is processing shutdown sequence");
@@ -391,6 +415,8 @@ void HWDevice::DumpLayerCommit(const mdp_layer_commit &layer_commit) {
     const mdp_rect &dst_rect = layer.dst_rect;
     DLOGI("layer = %d, pipe_ndx = %x, z = %d, flags = %x",
       i, layer.pipe_ndx, layer.z_order, layer.flags);
+    DLOGI("src_width = %d, src_height = %d, src_format = %d",
+      layer.buffer.width, layer.buffer.height, layer.buffer.format);
     DLOGI("src_rect: x = %d, y = %d, w = %d, h = %d",
       src_rect.x, src_rect.y, src_rect.w, src_rect.h);
     DLOGI("dst_rect: x = %d, y = %d, w = %d, h = %d",
@@ -486,7 +512,10 @@ DisplayError HWDevice::Commit(HWLayers *hw_layers) {
     mdp_commit.flags |= MDP_COMMIT_WAIT_FOR_FINISH;
   }
   if (bl_update_commit && bl_level_update_commit >= 0) {
-    SetPanelBrightness(bl_level_update_commit);
+#ifdef MDP_COMMIT_UPDATE_BRIGHTNESS
+    mdp_commit.bl_level = (uint32_t)bl_level_update_commit;
+    mdp_commit.flags |= MDP_COMMIT_UPDATE_BRIGHTNESS;
+#endif
   }
   if (Sys::ioctl_(device_fd_, INT(MSMFB_ATOMIC_COMMIT), &mdp_disp_commit_) < 0) {
     if (errno == ESHUTDOWN) {
@@ -1132,8 +1161,8 @@ DisplayError HWDevice::SetCursorPosition(HWLayers *hw_layers, int x, int y) {
   async_layer.pipe_ndx = left_pipe->pipe_id;
   async_layer.src.x = UINT32(left_pipe->src_roi.left);
   async_layer.src.y = UINT32(left_pipe->src_roi.top);
-  async_layer.dst.x = UINT32(x);
-  async_layer.dst.y = UINT32(y);
+  async_layer.dst.x = UINT32(left_pipe->dst_roi.left);
+  async_layer.dst.y = UINT32(left_pipe->dst_roi.top);
 
   mdp_position_update pos_update = {};
   pos_update.input_layer_cnt = 1;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -43,16 +43,34 @@
 #include <errno.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <cutils/properties.h>
-#include <cutils/log.h>
+#include <log/log.h>
 
 #include "audio_hw.h"
 #include "audio_extn.h"
+#include "audio_defs.h"
 #include "platform.h"
 #include "platform_api.h"
 #include "edid.h"
 
 #include "sound/compress_params.h"
+
+#ifdef DYNAMIC_LOG_ENABLED
+#include <log_xml_parser.h>
+#define LOG_MASK HAL_MOD_FILE_AUDIO_EXTN
+#include <log_utils.h>
+#endif
+
+#ifndef APTX_DECODER_ENABLED
+#define audio_extn_aptx_dec_set_license(adev) (0)
+#define audio_extn_set_aptx_dec_bt_addr(adev, parms) (0)
+#define audio_extn_parse_aptx_dec_bt_addr(value) (0)
+#else
+static void audio_extn_aptx_dec_set_license(struct audio_device *adev);
+static void audio_extn_set_aptx_dec_bt_addr(struct audio_device *adev, struct str_parms *parms);
+static void audio_extn_parse_aptx_dec_bt_addr(char *value);
+#endif
 
 #define MAX_SLEEP_RETRY 100
 #define WIFI_INIT_WAIT_SLEEP 50
@@ -67,6 +85,7 @@ struct audio_extn_module {
     bool hifi_audio_enabled;
     bool ras_enabled;
     struct aptx_dec_bt_addr addr;
+    struct audio_device *adev;
 };
 
 static struct audio_extn_module aextnmod;
@@ -180,6 +199,41 @@ static int update_ext_disp_sysfs_node(const struct audio_device *adev, int node_
     return ret;
 }
 
+static int update_audio_ack_state(const struct audio_device *adev, int node_value)
+{
+    const char *mixer_ctl_name = "External Display Audio Ack";
+    struct mixer_ctl *ctl;
+    int ret = 0;
+
+    ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+    /* If no mixer command support, fall back to sysfs node approach */
+    if (!ctl) {
+        ALOGI("%s: could not get ctl for mixer cmd(%s), use sysfs node instead\n",
+              __func__, mixer_ctl_name);
+        ret = update_ext_disp_sysfs_node(adev, node_value);
+    } else {
+        char *ack_str = NULL;
+
+        if (node_value == EXT_DISPLAY_PLUG_STATUS_NOTIFY_ENABLE)
+            ack_str = "Ack_Enable";
+        else if (node_value == 1)
+            ack_str = "Connect";
+        else if (node_value == 0)
+            ack_str = "Disconnect";
+        else {
+            ALOGE("%s: Invalid input parameter - 0x%x\n",
+                  __func__, node_value);
+            return -EINVAL;
+        }
+
+        ret = mixer_ctl_set_enum_by_string(ctl, ack_str);
+        if (ret)
+            ALOGE("%s: Could not set ctl for mixer cmd - %s ret %d\n",
+                  __func__, mixer_ctl_name, ret);
+    }
+    return ret;
+}
+
 static void audio_extn_ext_disp_set_parameters(const struct audio_device *adev,
                                                      struct str_parms *parms)
 {
@@ -192,13 +246,13 @@ static void audio_extn_ext_disp_set_parameters(const struct audio_device *adev,
         if (is_hdmi_sysfs_node_init == false) {
             //check if this is different for dp and hdmi
             is_hdmi_sysfs_node_init = true;
-            update_ext_disp_sysfs_node(adev, EXT_DISPLAY_PLUG_STATUS_NOTIFY_ENABLE);
+            update_audio_ack_state(adev, EXT_DISPLAY_PLUG_STATUS_NOTIFY_ENABLE);
         }
-        update_ext_disp_sysfs_node(adev, 1);
+        update_audio_ack_state(adev, 1);
     } else if(str_parms_get_str(parms, "disconnect", value, sizeof(value)) >= 0
             && (atoi(value) & AUDIO_DEVICE_OUT_AUX_DIGITAL)){
         //params = "disconnect=1024" for external display disconnection.
-        update_ext_disp_sysfs_node(adev, 0);
+        update_audio_ack_state(adev, 0);
         ALOGV("invalidate cached edid");
         platform_invalidate_hdmi_config(adev->platform);
     } else {
@@ -206,13 +260,6 @@ static void audio_extn_ext_disp_set_parameters(const struct audio_device *adev,
         return;
     }
 }
-
-#ifndef FM_POWER_OPT
-#define audio_extn_fm_set_parameters(adev, parms) (0)
-#else
-void audio_extn_fm_set_parameters(struct audio_device *adev,
-                                   struct str_parms *parms);
-#endif
 
 #ifndef SOURCE_TRACKING_ENABLED
 #define audio_extn_source_track_set_parameters(adev, parms) (0)
@@ -280,7 +327,7 @@ void audio_extn_hpx_set_parameters(struct audio_device *adev,
     struct mixer_ctl *ctl = NULL;
     ALOGV("%s", __func__);
 
-    property_get("use.dts_eagle", prop, "0");
+    property_get("vendor.audio.use.dts_eagle", prop, "0");
     if (strncmp("true", prop, sizeof("true")))
         return;
 
@@ -327,7 +374,7 @@ static int audio_extn_hpx_get_parameters(struct str_parms *query,
 void audio_extn_check_and_set_dts_hpx_state(const struct audio_device *adev)
 {
     char prop[PROPERTY_VALUE_MAX];
-    property_get("use.dts_eagle", prop, "0");
+    property_get("vendor.audio.use.dts_eagle", prop, "0");
     if (strncmp("true", prop, sizeof("true")))
         return;
     if (adev->offload_effects_set_hpx_state)
@@ -347,7 +394,7 @@ bool audio_extn_is_hifi_audio_supported(void)
     /*
      * for internal codec, check for hifiaudio property to enable hifi audio
      */
-    if (property_get_bool("persist.audio.hifi.int_codec", false))
+    if (property_get_bool("persist.vendor.audio.hifi.int_codec", false))
     {
         ALOGD("%s: hifi audio supported on internal codec", __func__);
         aextnmod.hifi_audio_enabled = 1;
@@ -368,7 +415,7 @@ bool audio_extn_can_use_vbat(void)
 {
     char prop_vbat_enabled[PROPERTY_VALUE_MAX] = "false";
 
-    property_get("persist.audio.vbat.enabled", prop_vbat_enabled, "0");
+    property_get("persist.vendor.audio.vbat.enabled", prop_vbat_enabled, "0");
     if (!strncmp("true", prop_vbat_enabled, 4)) {
         aextnmod.vbat_enabled = 1;
     }
@@ -387,7 +434,7 @@ bool audio_extn_is_ras_enabled(void)
 
 bool audio_extn_can_use_ras(void)
 {
-    if (property_get_bool("persist.audio.ras.enabled", false))
+    if (property_get_bool("persist.vendor.audio.ras.enabled", false))
         aextnmod.ras_enabled = 1;
 
     ALOGD("%s: ras.enabled property is set to %d", __func__, aextnmod.ras_enabled);
@@ -408,7 +455,7 @@ bool audio_extn_should_use_handset_anc(int in_channels)
 {
     char prop_aanc[PROPERTY_VALUE_MAX] = "false";
 
-    property_get("persist.aanc.enable", prop_aanc, "0");
+    property_get("persist.vendor.audio.aanc.enable", prop_aanc, "0");
     if (!strncmp("true", prop_aanc, 4)) {
         ALOGD("%s: AANC enabled in the property", __func__);
         aextnmod.aanc_enabled = 1;
@@ -422,7 +469,7 @@ bool audio_extn_should_use_fb_anc(void)
 {
   char prop_anc[PROPERTY_VALUE_MAX] = "feedforward";
 
-  property_get("persist.headset.anc.type", prop_anc, "0");
+  property_get("persist.vendor.audio.headset.anc.type", prop_anc, "0");
   if (!strncmp("feedback", prop_anc, sizeof("feedback"))) {
     ALOGD("%s: FB ANC headset type enabled\n", __func__);
     return true;
@@ -770,6 +817,7 @@ void audio_extn_init(struct audio_device *adev)
     aextnmod.addr.nap = 0;
     aextnmod.addr.uap = 0;
     aextnmod.addr.lap = 0;
+    aextnmod.adev = adev;
 
     audio_extn_dolby_set_license(adev);
     audio_extn_aptx_dec_set_license(adev);
@@ -1124,6 +1172,7 @@ int audio_extn_perf_lock_init(void)
                                                        "perf_lock_acq");
             if (perf_lock_acq == NULL) {
                 ALOGE("%s: Perf lock Acquire NULL \n", __func__);
+                dlclose(qcopt_handle);
                 ret = -EINVAL;
                 goto err;
             }
@@ -1131,6 +1180,7 @@ int audio_extn_perf_lock_init(void)
                                                        "perf_lock_rel");
             if (perf_lock_rel == NULL) {
                 ALOGE("%s: Perf lock Release NULL \n", __func__);
+                dlclose(qcopt_handle);
                 ret = -EINVAL;
                 goto err;
             }
@@ -1225,7 +1275,6 @@ int audio_extn_check_and_set_multichannel_usecase(struct audio_device *adev,
 static void audio_extn_aptx_dec_set_license(struct audio_device *adev)
 {
     int ret, key = 0;
-    char value[128] = {0};
     struct mixer_ctl *ctl;
     const char *mixer_ctl_name = "APTX Dec License";
 
@@ -1243,7 +1292,7 @@ static void audio_extn_aptx_dec_set_license(struct audio_device *adev)
         ALOGE("%s: cannot set license, error:%d",__func__, ret);
 }
 
-static void audio_extn_set_aptx_dec_bt_addr(struct audio_device *adev, struct str_parms *parms)
+static void audio_extn_set_aptx_dec_bt_addr(struct audio_device *adev __unused, struct str_parms *parms)
 {
     int ret = 0;
     char value[256];
@@ -1262,6 +1311,7 @@ int audio_extn_set_aptx_dec_params(struct aptx_dec_param *payload)
     aextnmod.addr.nap = aptx_cfg->bt_addr.nap;
     aextnmod.addr.uap = aptx_cfg->bt_addr.uap;
     aextnmod.addr.lap = aptx_cfg->bt_addr.lap;
+    return 0;
 }
 
 static void audio_extn_parse_aptx_dec_bt_addr(char *value)
@@ -1289,14 +1339,150 @@ static void audio_extn_parse_aptx_dec_bt_addr(char *value)
 
 void audio_extn_send_aptx_dec_bt_addr_to_dsp(struct stream_out *out)
 {
-    char mixer_ctl_name[128];
-    struct mixer_ctl *ctl;
-    uint32_t addr[3];
 
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     out->compr_config.codec->options.aptx_dec.nap = aextnmod.addr.nap;
     out->compr_config.codec->options.aptx_dec.uap = aextnmod.addr.uap;
     out->compr_config.codec->options.aptx_dec.lap = aextnmod.addr.lap;
 }
 
 #endif //APTX_DECODER_ENABLED
+
+int audio_extn_out_set_param_data(struct stream_out *out,
+                             audio_extn_param_id param_id,
+                             audio_extn_param_payload *payload) {
+    int ret = -EINVAL;
+
+    if (!out || !payload) {
+        ALOGE("%s:: Invalid Param",__func__);
+        return ret;
+    }
+
+    ALOGD("%s: enter: stream (%p) usecase(%d: %s) param_id %d", __func__,
+            out, out->usecase, use_case_table[out->usecase], param_id);
+
+    switch (param_id) {
+        case AUDIO_EXTN_PARAM_OUT_RENDER_WINDOW:
+            ret = audio_extn_utils_compress_set_render_window(out,
+                    (struct audio_out_render_window_param *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_OUT_START_DELAY:
+            ret = audio_extn_utils_compress_set_start_delay(out,
+                    (struct audio_out_start_delay_param *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_OUT_ENABLE_DRIFT_CORRECTION:
+            ret = audio_extn_utils_compress_enable_drift_correction(out,
+                    (struct audio_out_enable_drift_correction *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_OUT_CORRECT_DRIFT:
+            ret = audio_extn_utils_compress_correct_drift(out,
+                    (struct audio_out_correct_drift *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_ADSP_STREAM_CMD:
+            ret = audio_extn_adsp_hdlr_stream_set_param(out->adsp_hdlr_stream_handle,
+                    ADSP_HDLR_STREAM_CMD_REGISTER_EVENT,
+                    (void *)&payload->adsp_event_params);
+            break;
+        case AUDIO_EXTN_PARAM_OUT_CHANNEL_MAP:
+            ret = audio_extn_utils_set_channel_map(out,
+                    (struct audio_out_channel_map_param *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_OUT_MIX_MATRIX_PARAMS:
+            ret = audio_extn_utils_set_pan_scale_params(out,
+                    (struct mix_matrix_params *)(payload));
+            break;
+        case AUDIO_EXTN_PARAM_CH_MIX_MATRIX_PARAMS:
+            ret = audio_extn_utils_set_downmix_params(out,
+                    (struct mix_matrix_params *)(payload));
+            break;
+        default:
+            ALOGE("%s:: unsupported param_id %d", __func__, param_id);
+            break;
+    }
+    return ret;
+}
+
+/* API to get playback stream specific config parameters */
+int audio_extn_out_get_param_data(struct stream_out *out,
+                             audio_extn_param_id param_id,
+                             audio_extn_param_payload *payload)
+{
+    int ret = -EINVAL;
+    struct audio_usecase *uc_info;
+
+    if (!out || !payload) {
+        ALOGE("%s:: Invalid Param",__func__);
+        return ret;
+    }
+
+    switch (param_id) {
+        case AUDIO_EXTN_PARAM_AVT_DEVICE_DRIFT:
+            uc_info = get_usecase_from_list(out->dev, out->usecase);
+            if (uc_info == NULL) {
+                ALOGE("%s: Could not find the usecase (%d) in the list",
+                       __func__, out->usecase);
+                ret = -EINVAL;
+            } else {
+                ret = audio_extn_utils_get_avt_device_drift(uc_info,
+                        (struct audio_avt_device_drift_param *)payload);
+                if(ret)
+                    ALOGE("%s:: avdrift query failed error %d", __func__, ret);
+            }
+            break;
+        default:
+            ALOGE("%s:: unsupported param_id %d", __func__, param_id);
+            break;
+    }
+
+    return ret;
+}
+
+int audio_extn_set_device_cfg_params(struct audio_device *adev,
+                                     struct audio_device_cfg_param *payload)
+{
+    struct audio_device_cfg_param *device_cfg_params = payload;
+    int ret = -EINVAL;
+    struct stream_out out;
+    uint32_t snd_device = 0, backend_idx = 0;
+    struct audio_device_config_param *adev_device_cfg_ptr = adev->device_cfg_params;
+
+    ALOGV("%s", __func__);
+
+    if (!device_cfg_params || !adev) {
+        ALOGE("%s:: Invalid Param", __func__);
+        return ret;
+    }
+
+    /* Config is not supported for combo devices */
+    if (popcount(device_cfg_params->device) != 1) {
+        ALOGE("%s:: Invalid Device (%#x) - Config is ignored", __func__, device_cfg_params->device);
+        return ret;
+    }
+
+    /* Create an out stream to get snd device from audio device */
+    out.devices = device_cfg_params->device;
+    out.sample_rate = device_cfg_params->sample_rate;
+    snd_device = platform_get_output_snd_device(adev->platform, &out);
+    backend_idx = platform_get_backend_index(snd_device);
+
+    ALOGV("%s:: device %d sample_rate %d snd_device %d backend_idx %d",
+                __func__, out.devices, out.sample_rate, snd_device, backend_idx);
+
+    ALOGV("%s:: Device Config Params from Client samplerate %d  channels %d"
+          " bit_width %d  format %d  device %d  channel_map[0] %d channel_map[1] %d"
+          " channel_map[2] %d channel_map[3] %d channel_map[4] %d channel_map[5] %d"
+          " channel_allocation %d\n", __func__, device_cfg_params->sample_rate,
+          device_cfg_params->channels, device_cfg_params->bit_width,
+          device_cfg_params->format, device_cfg_params->device,
+          device_cfg_params->channel_map[0], device_cfg_params->channel_map[1],
+          device_cfg_params->channel_map[2], device_cfg_params->channel_map[3],
+          device_cfg_params->channel_map[4], device_cfg_params->channel_map[5],
+          device_cfg_params->channel_allocation);
+
+    /* Copy the config values into adev structure variable */
+    adev_device_cfg_ptr += backend_idx;
+    adev_device_cfg_ptr->use_client_dev_cfg = true;
+    memcpy(&adev_device_cfg_ptr->dev_cfg_params, device_cfg_params, sizeof(struct audio_device_cfg_param));
+
+    return 0;
+}

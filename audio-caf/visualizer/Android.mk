@@ -21,7 +21,7 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_CFLAGS+= -O2 -fvisibility=hidden
 
-ifneq ($(filter sdm660 msm8998,$(TARGET_BOARD_PLATFORM)),)
+ifneq ($(filter sdm660 sdm845 msm8998 apq8098_latv,$(TARGET_BOARD_PLATFORM)),)
     LOCAL_CFLAGS += -DCAPTURE_DEVICE=7
 endif
 
@@ -31,11 +31,15 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libtinyalsa
 
+LOCAL_HEADER_LIBRARIES := libhardware_headers
+
 LOCAL_MODULE_RELATIVE_PATH := soundfx
 LOCAL_MODULE:= libqcomvisualizer
+LOCAL_VENDOR_MODULE := true
 
 LOCAL_C_INCLUDES := \
 	external/tinyalsa/include \
 	$(call include-path-for, audio-effects)
 
+LOCAL_HEADER_LIBRARIES += libsystem_headers
 include $(BUILD_SHARED_LIBRARY)
