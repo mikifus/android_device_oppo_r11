@@ -47,11 +47,43 @@ TARGET_CPU_ABI := arm64-v8a
 TARGET_CPU_ABI2 :=
 TARGET_CPU_VARIANT := kryo
 
+# TARGET_2ND_ARCH := arm
+# TARGET_2ND_ARCH_VARIANT := armv7-a-neon
+# TARGET_2ND_CPU_ABI := armeabi-v7a
+# TARGET_2ND_CPU_ABI2 := armeabi
+# TARGET_2ND_CPU_VARIANT := kryo
 TARGET_2ND_ARCH := arm
-TARGET_2ND_ARCH_VARIANT := armv7-a-neon
 TARGET_2ND_CPU_ABI := armeabi-v7a
 TARGET_2ND_CPU_ABI2 := armeabi
-TARGET_2ND_CPU_VARIANT := kryo
+
+ifneq ($(TARGET_BUILD_APPS)$(filter cts sdk vts,$(MAKECMDGOALS)),)
+# DO NOT USE
+# DO NOT USE
+#
+# This architecture / CPU variant must NOT be used for any 64 bit
+# platform builds. It is the lowest common denominator required
+# to build an unbundled application or cts for all supported 32 and 64 bit
+# platforms.
+#
+# If you're building a 64 bit platform (and not an application) the
+# ARM-v8 specification allows you to assume all the features available in an
+# armv7-a-neon CPU. You should set the following as 2nd arch/cpu variant:
+#
+# TARGET_2ND_ARCH_VARIANT := armv8-a
+# TARGET_2ND_CPU_VARIANT := generic
+#
+# DO NOT USE
+# DO NOT USE
+TARGET_2ND_ARCH_VARIANT := armv7-a-neon
+# DO NOT USE
+# DO NOT USE
+TARGET_2ND_CPU_VARIANT := generic
+# DO NOT USE
+# DO NOT USE
+else
+TARGET_2ND_ARCH_VARIANT := armv8-a
+TARGET_2ND_CPU_VARIANT := generic
+endif
 
 #ENABLE_CPUSETS := true
 #ENABLE_SCHEDBOOST := true
@@ -74,6 +106,9 @@ TARGET_KERNEL_HEADER_ARCH := arm64
 #TARGET_KERNEL_SOURCE := kernel/oppo/sdm660
 #TARGET_KERNEL_CONFIG := lineageos_r11_defconfig
 #TARGET_KERNEL_CROSS_COMPILE_PREFIX := aarch64-linux-android-
+
+# Filesystem
+TARGET_FS_CONFIG_GEN := device/oppo/r11/config.fs
 
 # QCOM hardware
 BOARD_USES_QCOM_HARDWARE := true
